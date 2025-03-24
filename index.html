@@ -26,6 +26,7 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            cursor: pointer;
         }
         #current-image {
             max-width: 100%;
@@ -43,7 +44,7 @@
             cursor: pointer;
             font-size: 18px;
             border-radius: 5px;
-            transition: background 0.3s;
+            transition: background 0.3s, opacity 0.3s;
             z-index: 1000;
         }
         .nav-button:hover {
@@ -66,6 +67,7 @@
             border-radius: 5px;
             font-size: 14px;
             z-index: 1000;
+            transition: opacity 0.3s;
         }
         #fullscreen-button {
             position: absolute;
@@ -78,7 +80,7 @@
             cursor: pointer;
             font-size: 18px;
             border-radius: 5px;
-            transition: background 0.3s;
+            transition: background 0.3s, opacity 0.3s;
             z-index: 1000;
         }
         #fullscreen-button:hover {
@@ -91,6 +93,40 @@
         #slideshow-container:hover .controls {
             opacity: 1;
         }
+        #play-pause-indicator {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 18px;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #slideshow-container:hover #play-pause-indicator {
+            opacity: 1;
+        }
+
+        /* Hide UI elements in fullscreen mode */
+        :fullscreen .controls,
+        :fullscreen #play-pause-indicator {
+            display: none !important;
+        }
+        :-webkit-full-screen .controls,
+        :-webkit-full-screen #play-pause-indicator {
+            display: none !important;
+        }
+        :-moz-full-screen .controls,
+        :-moz-full-screen #play-pause-indicator {
+            display: none !important;
+        }
+        :-ms-fullscreen .controls,
+        :-ms-fullscreen #play-pause-indicator {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -100,27 +136,65 @@
         <button id="next-button" class="nav-button controls">❯</button>
         <div id="image-counter" class="controls"></div>
         <button id="fullscreen-button" class="controls">⛶</button>
+        <div id="play-pause-indicator">⏸</div>
     </div>
 
     <script>
         let currentIndex = 0;
         let images = [];
+        let slideshowInterval;
+        let isPlaying = true;
+        const SLIDESHOW_INTERVAL = 10000; // 10 seconds
         const socket = io();
-        const imageElement = document.getElementById('current-image');
+        const currentImage = document.getElementById('current-image');
         const prevButton = document.getElementById('prev-button');
         const nextButton = document.getElementById('next-button');
         const counterElement = document.getElementById('image-counter');
         const fullscreenButton = document.getElementById('fullscreen-button');
         const slideshowContainer = document.getElementById('slideshow-container');
+        const playPauseIndicator = document.getElementById('play-pause-indicator');
 
         function updateImage() {
             if (images.length === 0) {
-                imageElement.src = '';
+                currentImage.src = '';
                 counterElement.textContent = 'No images';
                 return;
             }
-            imageElement.src = `/media/${images[currentIndex]}`;
+            currentImage.src = `/media/${images[currentIndex]}`;
             counterElement.textContent = `${currentIndex + 1} / ${images.length}`;
+        }
+
+        function nextImage() {
+            if (images.length > 0) {
+                currentIndex = (currentIndex + 1) % images.length;
+                updateImage();
+            }
+        }
+
+        function startSlideshow() {
+            if (!isPlaying) return;
+            // Clear any existing interval first
+            stopSlideshow();
+            // Start new interval
+            slideshowInterval = setInterval(nextImage, SLIDESHOW_INTERVAL);
+            playPauseIndicator.textContent = '⏸';
+        }
+
+        function stopSlideshow() {
+            if (slideshowInterval) {
+                clearInterval(slideshowInterval);
+                slideshowInterval = null;
+            }
+            playPauseIndicator.textContent = '▶';
+        }
+
+        function toggleSlideshow() {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                startSlideshow();
+            } else {
+                stopSlideshow();
+            }
         }
 
         function loadImages() {
@@ -128,8 +202,16 @@
                 .then(response => response.json())
                 .then(data => {
                     images = data.files;
-                    currentIndex = 0;
-                    updateImage();
+                    if (images.length > 0) {
+                        currentIndex = 0;
+                        updateImage();
+                        if (isPlaying) {
+                            startSlideshow();
+                        }
+                    } else {
+                        currentImage.src = '';
+                        counterElement.textContent = 'No images';
+                    }
                 });
         }
 
@@ -166,12 +248,24 @@
 
         fullscreenButton.addEventListener('click', toggleFullscreen);
 
+        // Toggle slideshow on click
+        slideshowContainer.addEventListener('click', (e) => {
+            // Don't toggle if clicking on controls
+            if (e.target.classList.contains('controls') || e.target === fullscreenButton) {
+                return;
+            }
+            toggleSlideshow();
+        });
+
         socket.on('media_update', (data) => {
             images = data.files;
             if (currentIndex >= images.length) {
                 currentIndex = Math.max(0, images.length - 1);
             }
             updateImage();
+            if (isPlaying) {
+                startSlideshow();
+            }
         });
 
         // Initial load
