@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LAN Image Slideshow</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #slideshow-container {
+            position: relative;
+            max-width: 100vw;
+            max-height: 100vh;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #current-image {
+            max-width: 100%;
+            max-height: 100vh;
+            object-fit: contain;
+        }
+        .nav-button {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            padding: 15px;
+            cursor: pointer;
+            font-size: 18px;
+            border-radius: 5px;
+            transition: background 0.3s;
+            z-index: 1000;
+        }
+        .nav-button:hover {
+            background: rgba(0, 0, 0, 0.8);
+        }
+        #prev-button {
+            left: 10px;
+        }
+        #next-button {
+            right: 10px;
+        }
+        #image-counter {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 1000;
+        }
+        #fullscreen-button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+            font-size: 18px;
+            border-radius: 5px;
+            transition: background 0.3s;
+            z-index: 1000;
+        }
+        #fullscreen-button:hover {
+            background: rgba(0, 0, 0, 0.8);
+        }
+        .controls {
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #slideshow-container:hover .controls {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="slideshow-container">
+        <img id="current-image" src="" alt="Slideshow image">
+        <button id="prev-button" class="nav-button controls">❮</button>
+        <button id="next-button" class="nav-button controls">❯</button>
+        <div id="image-counter" class="controls"></div>
+        <button id="fullscreen-button" class="controls">⛶</button>
+    </div>
+
+    <script>
+        let currentIndex = 0;
+        let images = [];
+        const socket = io();
+        const imageElement = document.getElementById('current-image');
+        const prevButton = document.getElementById('prev-button');
+        const nextButton = document.getElementById('next-button');
+        const counterElement = document.getElementById('image-counter');
+        const fullscreenButton = document.getElementById('fullscreen-button');
+        const slideshowContainer = document.getElementById('slideshow-container');
+
+        function updateImage() {
+            if (images.length === 0) {
+                imageElement.src = '';
+                counterElement.textContent = 'No images';
+                return;
+            }
+            imageElement.src = `/media/${images[currentIndex]}`;
+            counterElement.textContent = `${currentIndex + 1} / ${images.length}`;
+        }
+
+        function loadImages() {
+            fetch('/api/media')
+                .then(response => response.json())
+                .then(data => {
+                    images = data.files;
+                    currentIndex = 0;
+                    updateImage();
+                });
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                slideshowContainer.requestFullscreen().catch(err => {
+                    console.log(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+                fullscreenButton.textContent = '⛶';
+            } else {
+                document.exitFullscreen();
+                fullscreenButton.textContent = '⛶';
+            }
+        }
+
+        // Update fullscreen button text when fullscreen changes
+        document.addEventListener('fullscreenchange', () => {
+            fullscreenButton.textContent = document.fullscreenElement ? '⛶' : '⛶';
+        });
+
+        prevButton.addEventListener('click', () => {
+            if (images.length > 0) {
+                currentIndex = (currentIndex - 1 + images.length) % images.length;
+                updateImage();
+            }
+        });
+
+        nextButton.addEventListener('click', () => {
+            if (images.length > 0) {
+                currentIndex = (currentIndex + 1) % images.length;
+                updateImage();
+            }
+        });
+
+        fullscreenButton.addEventListener('click', toggleFullscreen);
+
+        socket.on('media_update', (data) => {
+            images = data.files;
+            if (currentIndex >= images.length) {
+                currentIndex = Math.max(0, images.length - 1);
+            }
+            updateImage();
+        });
+
+        // Initial load
+        loadImages();
+
+        // Try to enter fullscreen mode when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                toggleFullscreen();
+            }, 1000); // Wait 1 second before entering fullscreen
+        });
+    </script>
+</body>
+</html> 
